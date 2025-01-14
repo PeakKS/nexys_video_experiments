@@ -1,0 +1,6 @@
+chipdb/*.bin
+*/*.bit
+*/*.frames
+*/*.fasm
+*/*.json
+*/*.cf
