@@ -1,6 +1,12 @@
 NEXTPNR_XILINX_DIR ?= /snap/openxc7/current/opt/nextpnr-xilinx
 NEXTPNR_XILINX_PYTHON_DIR ?= ${NEXTPNR_XILINX_DIR}/python
 PRJXRAY_DB_DIR ?= ${NEXTPNR_XILINX_DIR}/external/prjxray-db
+YOSYS_INCDIR = $(shell yosys-config --datdir)/include
+CXXRTL_RT_INCDIR = ${YOSYS_INCDIR}/backends/cxxrtl/runtime
+
+################################################################################
+CXX = clang++
+CXXFLAGS += -ggdb3 -O3 -std=c++14 -I ${CXXRTL_RT_INCDIR}
 
 DBPART = $(shell echo ${PART} | sed -e 's/-[0-9]//g')
 SPEEDGRADE = $(shell echo ${PART} | sed -e 's/.*\-\([0-9]\)/\1/g')
@@ -15,6 +21,12 @@ PYPY3 ?= pypy3
 TOP ?= ${PROJECT}
 TOP_MODULE ?= ${TOP}
 TOP_VHDL ?= ${TOP}.vhd
+TOP_CXX ?= ${TOP}.cc
+TOP_SIM ?= ${TOP}_sim
+
+MAIN_CXX ?= main.cc
+
+LIBRARY ?= work
 
 PNR_DEBUG ?= # --verbose --debug
 
@@ -30,6 +42,16 @@ all: ${PROJECT}.bit
 .PHONY: program
 program: ${PROJECT}.bit
 	openFPGALoader ${JTAG_LINK} --bitstream $<
+
+.PHONY: simulate
+simulate: ${TOP_SIM}
+	./$<
+
+${TOP_SIM}: ${MAIN_CXX} ${TOP_CXX}
+	${CXX} ${CXXFLAGS} ${MAIN_CXX} -o $@
+
+${TOP_CXX}: ${TOP_VHDL} ${ADDITIONAL_SOURCES}
+	yosys -m ghdl.so -p "ghdl ${TOP_VHDL} ${ADDITIONAL_SOURCES} -e ${TOP_MODULE}; write_cxxrtl ${TOP_CXX}"
 
 ${PROJECT}.json: ${TOP_VHDL} ${ADDITIONAL_SOURCES}
 	yosys -m ghdl.so -p "ghdl ${TOP_VHDL} ${ADDITIONAL_SOURCES} -e ${TOP_MODULE}; synth_xilinx -flatten -abc9 ${SYNTH_OPTS} -arch xc7 -top ${TOP_MODULE}; write_json ${PROJECT}.json"
@@ -52,11 +74,13 @@ ${PROJECT}.bit: ${PROJECT}.frames
 
 .PHONY: clean
 clean:
+	@rm -f ${TOP_SIM}
+	@rm -f ${TOP_CXX}
 	@rm -f *.bit
 	@rm -f *.frames
 	@rm -f *.fasm
 	@rm -f *.json
-	@rm -f *.cf
+	@rm -f *.vcd
 
 .PHONY: pnrclean
 pnrclean:
